@@ -3,12 +3,25 @@ import Input from './input.js';
 
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("lightblue");
+//scene.background = new THREE.Color("lightblue");
 scene.fog = new THREE.Fog(0x888888, 3, 100);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+
+
+function moy2(A, B, w) {
+  return [0, 1, 2].map((i) => A[i] * (1 - w) + B[i] * w);
+}
+
+function moy3(A, B, C, w) {
+  if (w < 1 / 2)
+    return moy2(A, B, w * 2);
+  else
+    return moy2(B, C, (w - 1 / 2) * 2);
+}
 
 
 class KleinBottle {
@@ -50,7 +63,7 @@ class KleinBottle {
 
     let n = 0;
     let vec = [0, 0, 0];
-    for (let u = 0; u < 1; u += 0.2) {
+    for (let u = 0; u < 1; u += 0.1) {
       n++;
       const A = KleinBottle.getPoint(u, v);
       vec = [vec[0] + A[0], vec[1] + A[1], vec[2] + A[2]];
@@ -60,31 +73,30 @@ class KleinBottle {
 
 
 
+  static lookAtVector(pos) {
+    if (pos.v > 0.01)
+      return KleinBottle.getPoint(pos.u, pos.v);
+    else
+      return [0, 0, -2];
+  }
 
-  static normalVector(pos) {
-    function moy2(A, B, w) {
-      return [0, 1, 2].map((i) => A[i] * (1 - w) + B[i] * w);
-    }
 
-    function moy3(A, B, C, w) {
-      if (w < 1 / 2) {
-        return moy2(A, B, w * 2);
-      }
-      else
-        return moy2(B, C, (w - 1 / 2) * 2);
-    }
+  static upVector(pos) {
+
 
     const p = KleinBottle.getPoint(pos.u, pos.v);
     const c = KleinBottle.centerAt(pos.v);
-    let vec = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
-    if (pos.outside)
-      vec = [-vec[0], -vec[1], -vec[2]];
+    const vec = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+    const vecOpposed = [-vec[0], -vec[1], -vec[2]];
 
+    const vFinal = pos.outside ? vec : vecOpposed;
     if (pos.v > 0.1)
-      return vec;
+      return vFinal;
     else
-     //      return moy3([-vec[0], -vec[1], -vec[2]], [0, 0, -2], vec, pos.v / 0.1);//a bit a hack
-     return moy2([-vec[0], -vec[1], -vec[2]], vec, pos.v / 0.1);//a bit a hack
+      return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
+
+    //
+    //  return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
 
   }
 
@@ -112,10 +124,10 @@ function geometryKleinBottle(uBegin, uEnd) {
       verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
       verticesArray.push(...KleinBottle.getPoint(u + step, v));
 
-      uvsArray.push([u, v]);
-      uvsArray.push([u, v + step]);
-      uvsArray.push([u + step, v + step]);
-      uvsArray.push([u + step, v]);
+      uvsArray.push(u, v);
+      uvsArray.push(u, v + step);
+      uvsArray.push(u + step, v + step);
+      uvsArray.push(u + step, v);
 
       indices.push(i, i + 1, i + 2, i, i + 2, i + 3);
       i += 4;
@@ -126,30 +138,34 @@ function geometryKleinBottle(uBegin, uEnd) {
   geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
+  /*  geometry.computeVertexNormals();
+    geometry.normalizeNormals ()
+   */
   return geometry;
 }
 
 
-
+const textureLoader = new THREE.TextureLoader();
+textureLoader.crossOrigin = "";
+const texture = textureLoader.load('ZeldaOverworldMap.png');
 
 function kleinBottleMesh(uBegin, uEnd, color) {
-  const sphereGeometry = geometryKleinBottle(uBegin, uEnd);
-  const textureLoader = new THREE.TextureLoader();
-  const texture = textureLoader.load('map.jpg');
+  const kleinBottleGeometry = geometryKleinBottle(uBegin, uEnd);
+
+
   const material = new THREE.MeshBasicMaterial({
-    // map: texture
-    color,
-    wireframe: true,
-    opacity: 0.2
+    map: texture,
+    //color,
+    //wireframe: true,
+    opacity: 0.9,
+    transparent: true
   });
   material.side = THREE.DoubleSide;
-  return new THREE.Mesh(sphereGeometry, material);
+  return new THREE.Mesh(kleinBottleGeometry, material);
 }
 
 
-scene.add(kleinBottleMesh(0, 1 / 2, "green"));
-scene.add(kleinBottleMesh(1 / 2, 1, "brown"));
-
+scene.add(kleinBottleMesh(0, 1, "green"));
 
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -165,7 +181,7 @@ function arrToThreeVec(a) {
 }
 
 const SPEEDU = 0.009;
-const SPEEDV = 0.004;
+const SPEEDV = 0.0008;
 
 
 class BottleKleinPosition {
@@ -194,7 +210,8 @@ class BottleKleinPosition {
     this.v += SPEEDV;
     if (this.v >= 1) {
       this.outside = !this.outside;
-      this.v = this.v - 1;
+      this.u = 1 - this.u;
+      this.v--;
     }
   }
 
@@ -202,6 +219,7 @@ class BottleKleinPosition {
     this.v -= SPEEDV;
     if (this.v < 0) {
       this.outside = !this.outside;
+      this.u = 1 - this.u;
       this.v++;
     }
   }
@@ -211,23 +229,25 @@ class BottleKleinPosition {
 
 
 
-let pos = new BottleKleinPosition(0, 0, false);
+let pos = new BottleKleinPosition(0, 0.99, true);
 
 function setCamera() {
   const distanceVNext = 0.1;
+  const h = 0.0;
   const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
   const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v + distanceVNext));
   const center = arrToThreeVec(KleinBottle.centerAt(pos.v));
   const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.v + distanceVNext));
 
-  const upVector = arrToThreeVec(KleinBottle.normalVector(pos));
+  const upVector = arrToThreeVec(KleinBottle.upVector(pos));
 
-  const pointSurfaceAbove = pointSurface.clone().add(upVector.clone().multiplyScalar(0.05));
+  const pointSurfaceAbove = pointSurface.clone().add(upVector.clone().multiplyScalar(h));
+  const nextPointSurfaceAbove = nextPointSurface;//.clone().add(upVector.clone().multiplyScalar(h));
 
 
   //set the vector for THREE.js
   const cameraPosition = pointSurfaceAbove;
-  const lookAtVector = nextPointSurface;
+  const lookAtVector = nextPointSurfaceAbove;
 
   camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
   camera.lookAt(lookAtVector);
@@ -249,9 +269,13 @@ function animate() {
   if (Input["ArrowLeft"]) pos.uPlus();
   if (Input["ArrowRight"]) pos.uMinus();
 
-  document.getElementById("info").innerHTML = pos.u + ", " + pos.v + ", " + pos.outside;
+  document.getElementById("info").innerHTML = "u = " + pos.u + ", v = " + pos.v
+    + ",<br> outside: " + pos.outside + ", <br>"
+    + "pos : " + KleinBottle.getPoint(pos.u, pos.v) + "<br>"
+    + "up : " + KleinBottle.upVector(pos);
   requestAnimationFrame(animate);
   setCamera();
+  // deloin();
   // deloin();
   //sphereMesh.rotation.y += 0.01;
   // sphereMesh.rotation.z -= 0.01;
@@ -259,6 +283,3 @@ function animate() {
 }
 animate();
 
-
-let position = [1, 0, 0];
-let direction = [0, 1, 0];
