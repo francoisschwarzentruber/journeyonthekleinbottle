@@ -33,13 +33,13 @@ class KleinBottle {
    * @returns the point on the surface at u v
    */
   static getPoint(u, v) {
-    u = u * Math.PI * 2;
-    v = v * Math.PI * 4;
+    [u, v] = [u * Math.PI * 4, v * Math.PI * 2];
 
     const sin = Math.sin;
     const cos = Math.cos;
     const pi = Math.PI;
 
+    [u, v] = [v, u];
     const x = v < 2 * pi ? (2.5 - 1.5 * cos(v)) * cos(u) :
       (v < 3 * pi ? -2 + (2 + cos(u)) * cos(v) :
         -2 + 2 * cos(v) - cos(u));
@@ -54,16 +54,34 @@ class KleinBottle {
   }
 
 
+
+  /**
+   *   static getPoint(u, v) {
+    [u, v] = [u * Math.PI * 2, v * Math.PI * 2];
+
+    const sin = Math.sin;
+    const cos = Math.cos;
+    const pi = Math.PI;
+
+     const c = 4 - 2 * cos(u);
+     const x = -6 * cos(u) * (1 + sin(u)) + c * cos(v);
+     const y = 16 * sin(u);
+     const z = c * sin(v);
+
+    return [x, y, z];
+  }
+   */
+
   /**
    * 
-   * @param {*} v 
+   * @param {*} u 
    * @returns the point at the center of the slice v
    */
-  static centerAt(v) {
+  static centerAt(u) {
 
     let n = 0;
     let vec = [0, 0, 0];
-    for (let u = 0; u < 1; u += 0.1) {
+    for (let v = 0; v < 1; v += 0.1) {
       n++;
       const A = KleinBottle.getPoint(u, v);
       vec = [vec[0] + A[0], vec[1] + A[1], vec[2] + A[2]];
@@ -73,28 +91,19 @@ class KleinBottle {
 
 
 
-  static lookAtVector(pos) {
-    if (pos.v > 0.01)
-      return KleinBottle.getPoint(pos.u, pos.v);
-    else
-      return [0, 0, -2];
-  }
-
-
   static upVector(pos) {
-
-
     const p = KleinBottle.getPoint(pos.u, pos.v);
-    const c = KleinBottle.centerAt(pos.v);
+    const c = KleinBottle.centerAt(pos.u);
     const vec = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
     const vecOpposed = [-vec[0], -vec[1], -vec[2]];
 
     const vFinal = pos.outside ? vec : vecOpposed;
-    if (pos.v > 0.1)
-      return vFinal;
-    else
-      return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
-
+    return vFinal;
+    /* if (pos.v > 0.1)
+       return vFinal;
+     else
+       return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
+ */
     //
     //  return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
 
@@ -180,8 +189,8 @@ function arrToThreeVec(a) {
   return new THREE.Vector3(a[0], a[1], a[2]);
 }
 
-const SPEEDU = 0.009;
-const SPEEDV = 0.0008;
+const SPEEDU = 0.0009;
+const SPEEDV = 0.009;
 
 
 class BottleKleinPosition {
@@ -195,6 +204,7 @@ class BottleKleinPosition {
   uPlus() {
     this.u += SPEEDU;
     if (this.u >= 1) {
+      this.outside = !this.outside;
       this.u = this.u - 1;
     }
   }
@@ -202,6 +212,8 @@ class BottleKleinPosition {
   uMinus() {
     this.u -= SPEEDU;
     if (this.u < 0) {
+      this.outside = !this.outside;
+
       this.u++;
     }
   }
@@ -209,8 +221,6 @@ class BottleKleinPosition {
   vPlus() {
     this.v += SPEEDV;
     if (this.v >= 1) {
-      this.outside = !this.outside;
-      this.u = 1 - this.u;
       this.v--;
     }
   }
@@ -218,8 +228,6 @@ class BottleKleinPosition {
   vMinus() {
     this.v -= SPEEDV;
     if (this.v < 0) {
-      this.outside = !this.outside;
-      this.u = 1 - this.u;
       this.v++;
     }
   }
@@ -233,11 +241,11 @@ let pos = new BottleKleinPosition(0, 0.99, true);
 
 function setCamera() {
   const distanceVNext = 0.1;
-  const h = 0.0;
+  const h = 0.1;
   const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
-  const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v + distanceVNext));
-  const center = arrToThreeVec(KleinBottle.centerAt(pos.v));
-  const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.v + distanceVNext));
+  const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u + distanceVNext, pos.v));
+  const center = arrToThreeVec(KleinBottle.centerAt(pos.u + distanceVNext));
+  const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.u + distanceVNext));
 
   const upVector = arrToThreeVec(KleinBottle.upVector(pos));
 
@@ -264,10 +272,10 @@ function deloin() {
 //sphereMesh.rotation.y = 1;
 
 function animate() {
-  if (Input["ArrowUp"]) pos.vPlus();
-  if (Input["ArrowDown"]) pos.vMinus();
-  if (Input["ArrowLeft"]) pos.uPlus();
-  if (Input["ArrowRight"]) pos.uMinus();
+  if (Input["ArrowUp"]) pos.uPlus();
+  if (Input["ArrowDown"]) pos.uMinus();
+  if (Input["ArrowLeft"]) pos.vPlus();
+  if (Input["ArrowRight"]) pos.vMinus();
 
   document.getElementById("info").innerHTML = "u = " + pos.u + ", v = " + pos.v
     + ",<br> outside: " + pos.outside + ", <br>"
