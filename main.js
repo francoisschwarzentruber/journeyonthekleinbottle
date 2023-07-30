@@ -7,75 +7,105 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-function geometryKleinBottle() {
-  const geometry = new THREE.BufferGeometry();
 
-  const sin = Math.sin;
-  const cos = Math.cos;
-  const frac = (a, b) => a / b;
-  const sqrt = Math.sqrt;
-  const pi = Math.PI;
-  const cos2 = (x) => cos(x) ** 2;
-  const cos3 = (x) => cos(x) ** 3;
-  const cos4 = (x) => cos(x) ** 4;
-  const sin2 = (x) => sin(x) ** 2;
+class KleinBottle {
 
-  function getPoint(u, v) {
-    const x = frac(sqrt(2) * (20 * u ** 3 - 65 * pi * u ** (2) + 50 * pi ** (2) * u - 16 * pi ** 3) * cos(v) * (cos(u) * (3 * cos2(u) - 1) - 2 * cos(2 * u)),
-      80 * pi ** 3 * sqrt(
-        8 * cos2(2 * u) - cos(2 * u) * (24 * cos3(u) - 8 * cos(u) + 15) + 6 * cos4(u) * (1 - 3 * sin2(u)) + 17
-      ))
-      - frac(3 * cos(u) - 3, 4)
-    const y = -frac((20 * u ** (3) - 65 * pi * u ** (2) + 50 * pi ** (2) * u - 16 * pi ** (3)) * sin(v),
-      (60 * pi ** (3)));
-    const z = -frac(sqrt(2) * (20 * u ** (3) - 65 * pi * u ** (2) + 50 * pi ** (2) * u - 16 * pi ** (3)) * sin(u) * cos(v),
-      15 * pi ** (3) * sqrt(8 * cos2(2 * u) - cos(2 * u) * (24 * cos3(u) - 8 * cos(u) + 15) + 6 * cos4(u) * (1 - 3 * sin2(u)) + 17))
-      + frac(sin(u) * cos2(u) + sin(u), 4)
-      - frac(sin(u) * cos(u), 2);
-    console.log([x, y, z])
+  /**
+   * 
+   * @param {*} u between 0 and 1
+   * @param {*} v between 0 and 1
+   * @returns 
+   */
+  static getPoint(u, v) {
+    u = u * Math.PI * 2;
+    v = v * Math.PI * 4;
+
+    const sin = Math.sin;
+    const cos = Math.cos;
+    const pi = Math.PI;
+
+    const x = v < 2 * pi ? (2.5 - 1.5 * cos(v)) * cos(u) :
+      (v < 3 * pi ? -2 + (2 + cos(u)) * cos(v) :
+        -2 + 2 * cos(v) - cos(u));
+    const y = v < 2 * pi ? (2.5 - 1.5 * cos(v)) * sin(u) :
+      sin(u);
+    const z = v < pi ? -2.5 * sin(v) :
+      v < 2 * pi ? 3 * v - 3 * pi :
+        v < 3 * pi ? (2 + cos(u)) * sin(v) + 3 * pi :
+          -3 * v + 12 * pi;
+
     return [x, y, z];
   }
+
+
+  static centerAt(v) {
+
+    let n = 0;
+    let vec = [0, 0, 0];
+    for (let u = 0; u < 1; u += 0.2) {
+      n++;
+      const A = KleinBottle.getPoint(u, v);
+      vec = [vec[0] + A[0], vec[1] + A[1], vec[2] + A[2]];
+    }
+    return [vec[0] / n, vec[1] / n, vec[2] / n];
+  }
+
+}
+
+
+function geometryKleinBottle(uBegin, uEnd) {
+  const geometry = new THREE.BufferGeometry();
   // create a simple square shape. We duplicate the top left and bottom right
   // vertices because each vertex needs to appear once per triangle.
-
   const verticesArray = [];
-  const step = 0.1;
-  for (let u = 0.1; u < 2 * pi; u += step)
-    for (let v = 0.1; v < 2 * pi; v += step) {
-      verticesArray.push(...getPoint(u, v));
-      verticesArray.push(...getPoint(u, v + step));
-      verticesArray.push(...getPoint(u + step, v + step));
+  const uvsArray = [];
+  const step = 0.005;
+  for (let v = uBegin; v < uEnd; v += step)
+    for (let u = 0; u < 1; u += step) {
+      verticesArray.push(...KleinBottle.getPoint(u, v));
+      verticesArray.push(...KleinBottle.getPoint(u, v + step));
+      verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
 
-      verticesArray.push(...getPoint(u + step, v + step));
-      verticesArray.push(...getPoint(u, v));
-      verticesArray.push(...getPoint(u + step, v));
+      verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
+      verticesArray.push(...KleinBottle.getPoint(u, v));
+      verticesArray.push(...KleinBottle.getPoint(u + step, v));
+
+      uvsArray.push([u, v]);
+      uvsArray.push([u, v + step]);
+      uvsArray.push([u + step, v + step]);
+
+      uvsArray.push([u + step, v + step]);
+      uvsArray.push([u, v]);
+      uvsArray.push([u + step, v]);
+
+
     }
 
-  const vertices = new Float32Array(
-    verticesArray
-  );
-  // itemSize = 3 because there are 3 values (components) per vertex
+  const vertices = new Float32Array(verticesArray);
+  const uvs = new Float32Array(uvsArray);
   geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-
-
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   return geometry;
 }
 
 
 
-const sphereGeometry = geometryKleinBottle();
+
+function kleinBottleMesh(uBegin, uEnd, color) {
+  const sphereGeometry = geometryKleinBottle(uBegin, uEnd);
+  const textureLoader = new THREE.TextureLoader();
+  const texture = textureLoader.load('map.jpg');
+  const material = new THREE.MeshBasicMaterial({ map: texture
+  //  , color, wireframe: true
+   });
+  material.side = THREE.DoubleSide;
+  return new THREE.Mesh(sphereGeometry, material);
+}
 
 
+scene.add(kleinBottleMesh(0, 1 / 2, "lightgreen"));
+scene.add(kleinBottleMesh(1 / 2, 1, "brown"));
 
-const textureLoader = new THREE.TextureLoader();
-//const texture = textureLoader.load('SNES_Mario_Circuit_3_map.png');
-const texture = textureLoader.load('map.jpg');
-
-const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-material.side = THREE.DoubleSide;
-const sphereMesh = new THREE.Mesh(sphereGeometry, material);
-
-scene.add(sphereMesh);
 
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -84,20 +114,98 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 
-function inside() {
-  camera.position.set(0, 2, 0);
-  camera.lookAt(0, 0, 0);
-  camera.up.set(0, 1, 0);
+
+
+function arrToThreeVec(a) {
+  return new THREE.Vector3(a[0], a[1], a[2]);
 }
 
-inside();
+
+
+class BottleKleinPosition {
+  constructor(u, v, inside) {
+    this.u = u;
+    this.v = v;
+    this.inside = inside;
+  }
+
+
+  uPlus() {
+    const SPEED = 0.005;
+    this.u += SPEED;
+    if (this.u >= 1) {
+      this.u = this.u - 1;
+    }
+  }
+
+  vPlus() {
+    const SPEED = 0.005;
+    this.v += SPEED;
+    if (this.v >= 1) {
+      this.inside != this.inside;
+      this.v = this.u - 1;
+    }
+  }
+
+
+}
+
+
+
+let pos = new BottleKleinPosition(0, 0, false);
+
+function setCamera() {
+  const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
+  const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
+  const center = arrToThreeVec(KleinBottle.centerAt(pos.v));
+  const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.v + 0.1));
+
+  const normalToOutside = new THREE.Vector3(pointSurface.x - center.x, pointSurface.y - center.y, pointSurface.z - center.z);
+  const normalToInside = normalToOutside.clone().negate();
+
+  const pointSurfaceOutside = pointSurface.clone().add(normalToOutside);
+  const pointSurfaceInside = pointSurface.clone().add(normalToOutside.clone().negate());
+
+
+  //set the vector for THREE.js
+
+
+  let cameraPosition;
+  let lookAtVector;
+  let upVector;
+
+  if (pos.inside) {
+    cameraPosition = pointSurfaceInside;
+    lookAtVector = nextCenter;
+    upVector = normalToOutside;
+  }
+  else {
+    cameraPosition = pointSurfaceOutside;
+    lookAtVector = nextCenter;
+    upVector = normalToOutside;
+  }
+
+  camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+  camera.lookAt(lookAtVector);
+  camera.up.set(upVector.x, upVector.y, upVector.z);
+
+}
+
+
+function deloin() {
+  camera.position.set(-1, -10, -1);
+  camera.lookAt(0, 0, 0);
+  camera.up.set(0, 10, 0);
+}
 //sphereMesh.rotation.y = 1;
 
 function animate() {
+  pos.vPlus();
   requestAnimationFrame(animate);
-
+  setCamera();
+  // deloin();
   //sphereMesh.rotation.y += 0.01;
-  sphereMesh.rotation.z -= 0.01;
+  // sphereMesh.rotation.z -= 0.01;
   renderer.render(scene, camera);
 }
 animate();
