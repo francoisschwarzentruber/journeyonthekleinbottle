@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import Input from './input.js';
+
 
 const scene = new THREE.Scene();
-
+scene.background = new THREE.Color("lightblue");
+scene.fog = new THREE.Fog(0x888888, 3, 100);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -14,7 +17,7 @@ class KleinBottle {
    * 
    * @param {*} u between 0 and 1
    * @param {*} v between 0 and 1
-   * @returns 
+   * @returns the point on the surface at u v
    */
   static getPoint(u, v) {
     u = u * Math.PI * 2;
@@ -38,6 +41,11 @@ class KleinBottle {
   }
 
 
+  /**
+   * 
+   * @param {*} v 
+   * @returns the point at the center of the slice v
+   */
   static centerAt(v) {
 
     let n = 0;
@@ -50,7 +58,42 @@ class KleinBottle {
     return [vec[0] / n, vec[1] / n, vec[2] / n];
   }
 
+
+
+
+  static normalVector(pos) {
+    function moy2(A, B, w) {
+      return [0, 1, 2].map((i) => A[i] * (1 - w) + B[i] * w);
+    }
+
+    function moy3(A, B, C, w) {
+      if (w < 1 / 2) {
+        return moy2(A, B, w * 2);
+      }
+      else
+        return moy2(B, C, (w - 1 / 2) * 2);
+    }
+
+    const p = KleinBottle.getPoint(pos.u, pos.v);
+    const c = KleinBottle.centerAt(pos.v);
+    let vec = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+    if (pos.outside)
+      vec = [-vec[0], -vec[1], -vec[2]];
+
+    if (pos.v > 0.1)
+      return vec;
+    else
+     //      return moy3([-vec[0], -vec[1], -vec[2]], [0, 0, -2], vec, pos.v / 0.1);//a bit a hack
+     return moy2([-vec[0], -vec[1], -vec[2]], vec, pos.v / 0.1);//a bit a hack
+
+  }
+
+
+
+
+
 }
+
 
 
 function geometryKleinBottle(uBegin, uEnd) {
@@ -59,32 +102,30 @@ function geometryKleinBottle(uBegin, uEnd) {
   // vertices because each vertex needs to appear once per triangle.
   const verticesArray = [];
   const uvsArray = [];
+  const indices = [];
+  let i = 0;
   const step = 0.005;
   for (let v = uBegin; v < uEnd; v += step)
     for (let u = 0; u < 1; u += step) {
       verticesArray.push(...KleinBottle.getPoint(u, v));
       verticesArray.push(...KleinBottle.getPoint(u, v + step));
       verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
-
-      verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
-      verticesArray.push(...KleinBottle.getPoint(u, v));
       verticesArray.push(...KleinBottle.getPoint(u + step, v));
 
       uvsArray.push([u, v]);
       uvsArray.push([u, v + step]);
       uvsArray.push([u + step, v + step]);
-
-      uvsArray.push([u + step, v + step]);
-      uvsArray.push([u, v]);
       uvsArray.push([u + step, v]);
 
-
+      indices.push(i, i + 1, i + 2, i, i + 2, i + 3);
+      i += 4;
     }
 
   const vertices = new Float32Array(verticesArray);
   const uvs = new Float32Array(uvsArray);
   geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   return geometry;
 }
 
@@ -95,15 +136,18 @@ function kleinBottleMesh(uBegin, uEnd, color) {
   const sphereGeometry = geometryKleinBottle(uBegin, uEnd);
   const textureLoader = new THREE.TextureLoader();
   const texture = textureLoader.load('map.jpg');
-  const material = new THREE.MeshBasicMaterial({ map: texture
-  //  , color, wireframe: true
-   });
+  const material = new THREE.MeshBasicMaterial({
+    // map: texture
+    color,
+    wireframe: true,
+    opacity: 0.2
+  });
   material.side = THREE.DoubleSide;
   return new THREE.Mesh(sphereGeometry, material);
 }
 
 
-scene.add(kleinBottleMesh(0, 1 / 2, "lightgreen"));
+scene.add(kleinBottleMesh(0, 1 / 2, "green"));
 scene.add(kleinBottleMesh(1 / 2, 1, "brown"));
 
 
@@ -120,30 +164,45 @@ function arrToThreeVec(a) {
   return new THREE.Vector3(a[0], a[1], a[2]);
 }
 
+const SPEEDU = 0.009;
+const SPEEDV = 0.004;
 
 
 class BottleKleinPosition {
   constructor(u, v, inside) {
     this.u = u;
     this.v = v;
-    this.inside = inside;
+    this.outside = inside;
   }
 
 
   uPlus() {
-    const SPEED = 0.005;
-    this.u += SPEED;
+    this.u += SPEEDU;
     if (this.u >= 1) {
       this.u = this.u - 1;
     }
   }
 
+  uMinus() {
+    this.u -= SPEEDU;
+    if (this.u < 0) {
+      this.u++;
+    }
+  }
+
   vPlus() {
-    const SPEED = 0.005;
-    this.v += SPEED;
+    this.v += SPEEDV;
     if (this.v >= 1) {
-      this.inside != this.inside;
-      this.v = this.u - 1;
+      this.outside = !this.outside;
+      this.v = this.v - 1;
+    }
+  }
+
+  vMinus() {
+    this.v -= SPEEDV;
+    if (this.v < 0) {
+      this.outside = !this.outside;
+      this.v++;
     }
   }
 
@@ -155,35 +214,20 @@ class BottleKleinPosition {
 let pos = new BottleKleinPosition(0, 0, false);
 
 function setCamera() {
+  const distanceVNext = 0.1;
   const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
-  const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
+  const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v + distanceVNext));
   const center = arrToThreeVec(KleinBottle.centerAt(pos.v));
-  const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.v + 0.1));
+  const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.v + distanceVNext));
 
-  const normalToOutside = new THREE.Vector3(pointSurface.x - center.x, pointSurface.y - center.y, pointSurface.z - center.z);
-  const normalToInside = normalToOutside.clone().negate();
+  const upVector = arrToThreeVec(KleinBottle.normalVector(pos));
 
-  const pointSurfaceOutside = pointSurface.clone().add(normalToOutside);
-  const pointSurfaceInside = pointSurface.clone().add(normalToOutside.clone().negate());
+  const pointSurfaceAbove = pointSurface.clone().add(upVector.clone().multiplyScalar(0.05));
 
 
   //set the vector for THREE.js
-
-
-  let cameraPosition;
-  let lookAtVector;
-  let upVector;
-
-  if (pos.inside) {
-    cameraPosition = pointSurfaceInside;
-    lookAtVector = nextCenter;
-    upVector = normalToOutside;
-  }
-  else {
-    cameraPosition = pointSurfaceOutside;
-    lookAtVector = nextCenter;
-    upVector = normalToOutside;
-  }
+  const cameraPosition = pointSurfaceAbove;
+  const lookAtVector = nextPointSurface;
 
   camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
   camera.lookAt(lookAtVector);
@@ -200,7 +244,12 @@ function deloin() {
 //sphereMesh.rotation.y = 1;
 
 function animate() {
-  pos.vPlus();
+  if (Input["ArrowUp"]) pos.vPlus();
+  if (Input["ArrowDown"]) pos.vMinus();
+  if (Input["ArrowLeft"]) pos.uPlus();
+  if (Input["ArrowRight"]) pos.uMinus();
+
+  document.getElementById("info").innerHTML = pos.u + ", " + pos.v + ", " + pos.outside;
   requestAnimationFrame(animate);
   setCamera();
   // deloin();
