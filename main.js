@@ -56,21 +56,21 @@ class KleinBottle {
 
 
   /**
-   *   static getPoint(u, v) {
-    [u, v] = [u * Math.PI * 2, v * Math.PI * 2];
-
-    const sin = Math.sin;
-    const cos = Math.cos;
-    const pi = Math.PI;
-
-     const c = 4 - 2 * cos(u);
-     const x = -6 * cos(u) * (1 + sin(u)) + c * cos(v);
-     const y = 16 * sin(u);
-     const z = c * sin(v);
-
-    return [x, y, z];
-  }
-   */
+      static getPoint(u, v) {
+     [u, v] = [u * Math.PI * 2, v * Math.PI * 2];
+ 
+     const sin = Math.sin;
+     const cos = Math.cos;
+     const pi = Math.PI;
+ 
+      const c = 4 - 2 * cos(u);
+      const x = -6 * cos(u) * (1 + sin(u)) + c * cos(v);
+      const y = 16 * sin(u);
+      const z = c * sin(v);
+ 
+     return [x, y, z];
+   }
+    */
 
   /**
    * 
@@ -98,14 +98,17 @@ class KleinBottle {
     const vecOpposed = [-vec[0], -vec[1], -vec[2]];
 
     const vFinal = pos.outside ? vec : vecOpposed;
-    return vFinal;
-    /* if (pos.v > 0.1)
-       return vFinal;
-     else
-       return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
- */
-    //
-    //  return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
+    if (pos.u > 0.1)
+      return vFinal;
+    else {
+
+      //return moy2([-vFinal[0], -vFinal[1], -vFinal[2]], vFinal, pos.v / 0.1);//a bit a hack
+      const innerVector = pos.outside ? [0, 0, -4] : [0, 0, 4];
+      return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], innerVector, vFinal, pos.u / 0.1);//a bit a hack
+
+      //
+      //  return moy3([-vFinal[0], -vFinal[1], -vFinal[2]], [0, 0, -20], vFinal, pos.v / 0.1);//a bit a hack
+    }
 
   }
 
@@ -157,6 +160,7 @@ function geometryKleinBottle(uBegin, uEnd) {
 const textureLoader = new THREE.TextureLoader();
 textureLoader.crossOrigin = "";
 const texture = textureLoader.load('ZeldaOverworldMap.png');
+//const texture = textureLoader.load('degrade.png');
 
 function kleinBottleMesh(uBegin, uEnd, color) {
   const kleinBottleGeometry = geometryKleinBottle(uBegin, uEnd);
@@ -200,20 +204,28 @@ class BottleKleinPosition {
     this.outside = inside;
   }
 
+  _shiftV() {
+    this.v = (this.v <= 0.5) ? 0.5 - this.v : 1 - this.v;
+    if (this.v >= 1) this.v--;
+  }
+
 
   uPlus() {
     this.u += SPEEDU;
     if (this.u >= 1) {
       this.outside = !this.outside;
+      this._shiftV();
       this.u = this.u - 1;
     }
   }
+
+
 
   uMinus() {
     this.u -= SPEEDU;
     if (this.u < 0) {
       this.outside = !this.outside;
-
+      this._shiftV();
       this.u++;
     }
   }
@@ -237,11 +249,11 @@ class BottleKleinPosition {
 
 
 
-let pos = new BottleKleinPosition(0, 0.99, true);
+let pos = new BottleKleinPosition(0.99, 0.25, true);
 
 function setCamera() {
   const distanceVNext = 0.1;
-  const h = 0.1;
+  const h = 0.3;
   const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
   const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u + distanceVNext, pos.v));
   const center = arrToThreeVec(KleinBottle.centerAt(pos.u + distanceVNext));
@@ -277,10 +289,13 @@ function animate() {
   if (Input["ArrowLeft"]) pos.vPlus();
   if (Input["ArrowRight"]) pos.vMinus();
 
-  document.getElementById("info").innerHTML = "u = " + pos.u + ", v = " + pos.v
+  function vecToStr(v) {
+    return v.map((e) => e.toFixed(2));
+  }
+  document.getElementById("info").innerHTML = "u = " + pos.u.toFixed(2) + ", v = " + pos.v.toFixed(2)
     + ",<br> outside: " + pos.outside + ", <br>"
-    + "pos : " + KleinBottle.getPoint(pos.u, pos.v) + "<br>"
-    + "up : " + KleinBottle.upVector(pos);
+    + "pos : " + vecToStr(KleinBottle.getPoint(pos.u, pos.v)) + "<br>"
+    + "up : " + vecToStr(KleinBottle.upVector(pos));
   requestAnimationFrame(animate);
   setCamera();
   // deloin();
