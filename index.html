@@ -10,10 +10,22 @@
 			margin: 0;
 		}
 
-		div {
+		#info {
 			position: absolute;
 			color: white;
 			background: black;
+			visibility: hidden;
+		}
+
+		#caption {
+			position:absolute;
+			right:0px;
+			top: 0px;
+			color:white;
+			background: black;
+			opacity: 0.8;
+			padding:16px;
+			font-size: 3em;
 		}
 	</style>
 	<script type="importmap">
@@ -31,6 +43,7 @@
 
 <body>
 	<div id="info"></div>
+	<div id="caption"></div>
 	<script type="module" src="./main.js"></script>
 </body>
 
