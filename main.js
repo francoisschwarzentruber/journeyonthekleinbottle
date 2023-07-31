@@ -24,15 +24,18 @@ function moy3(A, B, C, w) {
 }
 
 
+
+function shiftV(v) {
+  v = (v <= 0.5) ? 0.5 - v : 1 - v;
+  if (v >= 1) v--;
+  return v;
+}
+
+
+
 class KleinBottle {
 
-  /**
-   * 
-   * @param {*} u between 0 and 1
-   * @param {*} v between 0 and 1
-   * @returns the point on the surface at u v
-   */
-  static getPoint(u, v) {
+  static getParameterization(u, v) {
     [u, v] = [u * Math.PI * 4, v * Math.PI * 2];
 
     const sin = Math.sin;
@@ -56,21 +59,57 @@ class KleinBottle {
 
 
   /**
-      static getPoint(u, v) {
-     [u, v] = [u * Math.PI * 2, v * Math.PI * 2];
+    static getParameterization(u, v) {
+   [u, v] = [u * Math.PI * 2, v * Math.PI * 2];
  
-     const sin = Math.sin;
-     const cos = Math.cos;
-     const pi = Math.PI;
+   const sin = Math.sin;
+   const cos = Math.cos;
+   const pi = Math.PI;
  
-      const c = 4 - 2 * cos(u);
-      const x = -6 * cos(u) * (1 + sin(u)) + c * cos(v);
-      const y = 16 * sin(u);
-      const z = c * sin(v);
+    const c = 4 - 2 * cos(u);
+    const x = -6 * cos(u) * (1 + sin(u)) + c * cos(v);
+    const y = 16 * sin(u);
+    const z = c * sin(v);
  
-     return [x, y, z];
-   }
-    */
+   return [x, y, z];
+ }
+  */
+
+
+  /**
+   * 
+   * @param {*} u between 0 and 1
+   * @param {*} v between 0 and 1
+   * @returns the point on the surface at u v
+   */
+  static getPoint(u, v) {
+    if (u > 1) {
+      u = u - 1;
+      v = shiftV(v);
+    }
+
+    return KleinBottle.getParameterization(u, v);
+
+  }
+
+
+
+
+  static du(u, v) {
+    const p1 = KleinBottle.getPoint(u, v);
+    const p2 = KleinBottle.getPoint(u + 0.01, v);
+
+    return [0, 1, 2].map((i) => (p2[i] - p1[i]));
+  }
+
+
+  static dv(u, v) {
+    const p1 = KleinBottle.getPoint(u, v);
+    const p2 = KleinBottle.getPoint(u, v + 0.01);
+
+    return [0, 1, 2].map((i) => (p2[i] - p1[i]));
+  }
+
 
   /**
    * 
@@ -131,10 +170,10 @@ function geometryKleinBottle(uBegin, uEnd) {
   const step = 0.005;
   for (let v = uBegin; v < uEnd; v += step)
     for (let u = 0; u < 1; u += step) {
-      verticesArray.push(...KleinBottle.getPoint(u, v));
-      verticesArray.push(...KleinBottle.getPoint(u, v + step));
-      verticesArray.push(...KleinBottle.getPoint(u + step, v + step));
-      verticesArray.push(...KleinBottle.getPoint(u + step, v));
+      verticesArray.push(...KleinBottle.getParameterization(u, v));
+      verticesArray.push(...KleinBottle.getParameterization(u, v + step));
+      verticesArray.push(...KleinBottle.getParameterization(u + step, v + step));
+      verticesArray.push(...KleinBottle.getParameterization(u + step, v));
 
       uvsArray.push(u, v);
       uvsArray.push(u, v + step);
@@ -193,8 +232,11 @@ function arrToThreeVec(a) {
   return new THREE.Vector3(a[0], a[1], a[2]);
 }
 
-const SPEEDU = 0.0009;
+const SPEEDU = 0.009;
 const SPEEDV = 0.009;
+
+
+
 
 
 class BottleKleinPosition {
@@ -205,8 +247,7 @@ class BottleKleinPosition {
   }
 
   _shiftV() {
-    this.v = (this.v <= 0.5) ? 0.5 - this.v : 1 - this.v;
-    if (this.v >= 1) this.v--;
+    this.v = shiftV(this.v);
   }
 
 
@@ -249,25 +290,29 @@ class BottleKleinPosition {
 
 
 
-let pos = new BottleKleinPosition(0.99, 0.25, true);
+let pos = new BottleKleinPosition(0.99, 0.25, false);
 
 function setCamera() {
   const distanceVNext = 0.1;
-  const h = 0.3;
+  const h = 0.2;
   const pointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u, pos.v));
   const nextPointSurface = arrToThreeVec(KleinBottle.getPoint(pos.u + distanceVNext, pos.v));
+  const du = arrToThreeVec(KleinBottle.du(pos.u, pos.v));
+  const dv = arrToThreeVec(KleinBottle.dv(pos.u, pos.v));
   const center = arrToThreeVec(KleinBottle.centerAt(pos.u + distanceVNext));
   const nextCenter = arrToThreeVec(KleinBottle.centerAt(pos.u + distanceVNext));
 
-  const upVector = arrToThreeVec(KleinBottle.upVector(pos));
+  const upVector = du.clone().cross(dv).normalize();
+  if (pos.outside)
+    upVector.negate();
 
   const pointSurfaceAbove = pointSurface.clone().add(upVector.clone().multiplyScalar(h));
-  const nextPointSurfaceAbove = nextPointSurface;//.clone().add(upVector.clone().multiplyScalar(h));
+  const nextPointSurfaceAbove = nextPointSurface.clone().add(upVector.clone().multiplyScalar(h));//.clone().add(upVector.clone().multiplyScalar(h));
 
 
   //set the vector for THREE.js
   const cameraPosition = pointSurfaceAbove;
-  const lookAtVector = nextPointSurfaceAbove;
+  const lookAtVector = pointSurfaceAbove.clone().add(du);
 
   camera.position.set(cameraPosition.x, cameraPosition.y, cameraPosition.z);
   camera.lookAt(lookAtVector);
@@ -289,13 +334,14 @@ function animate() {
   if (Input["ArrowLeft"]) pos.vPlus();
   if (Input["ArrowRight"]) pos.vMinus();
 
-  function vecToStr(v) {
+  function arrayOfNumbersToStr(v) {
     return v.map((e) => e.toFixed(2));
   }
   document.getElementById("info").innerHTML = "u = " + pos.u.toFixed(2) + ", v = " + pos.v.toFixed(2)
     + ",<br> outside: " + pos.outside + ", <br>"
-    + "pos : " + vecToStr(KleinBottle.getPoint(pos.u, pos.v)) + "<br>"
-    + "up : " + vecToStr(KleinBottle.upVector(pos));
+    + "pos : " + arrayOfNumbersToStr(KleinBottle.getPoint(pos.u, pos.v)) + "<br>"
+    + "du : " + arrayOfNumbersToStr(KleinBottle.du(pos.u, pos.v))
+    + "dv : " + arrayOfNumbersToStr(KleinBottle.dv(pos.u, pos.v));
   requestAnimationFrame(animate);
   setCamera();
   // deloin();
